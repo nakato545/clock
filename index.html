@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>実験教室 時計・メディア共有システム</title>
+    <style>
+        :root {
+            --bg-color: #f8f9fa;
+            --panel-bg: #ffffff;
+            --text-color: #222;
+            --accent-color: #0056b3;
+            --alert-color: #ff0000;
+            --share-color: #28a745;
+        }
+
+        body, html {
+            margin: 0; padding: 0; height: 100%;
+            font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overflow: hidden;
+        }
+
+        .container { display: flex; height: 100vh; }
+
+        .left-panel { flex: 60; display: flex; flex-direction: column; justify-content: center; align-items: center; border-right: 5px solid #ccc; background-color: var(--panel-bg); position: relative; padding-bottom: 30px; transition: flex 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+        .right-panel { flex: 40; background-color: #eee; position: relative; display: flex; flex-direction: column; transition: flex 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease; }
+        
+        .full-clock .left-panel { flex: 100; border-right: none; }
+        .full-clock .right-panel { flex: 0; opacity: 0; pointer-events: none; overflow: hidden; }
+
+        #analog-clock { width: 400px; height: 400px; border: 15px solid #333; border-radius: 50%; position: relative; margin-bottom: 50px; background: #fff; }
+        #end-marker { position: absolute; top: -40px; left: 50%; width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-top: 20px solid var(--alert-color); margin-left: -8px; transform-origin: 8px 240px; display: none; z-index: 10; }
+        .number { position: absolute; width: 100%; height: 100%; text-align: center; font-size: 2.4rem; font-weight: 900; padding: 10px; box-sizing: border-box; }
+        .hand { position: absolute; bottom: 50%; left: 50%; transform-origin: bottom; border-radius: 10px; }
+        .hour-hand { width: 14px; height: 110px; margin-left: -7px; background: #333; z-index: 3; }
+        .min-hand { width: 10px; height: 160px; margin-left: -5px; background: #555; z-index: 2; }
+        .sec-hand { width: 3px; height: 175px; margin-left: -1.5px; background: #ff0000; z-index: 4; }
+        .center-pin { position: absolute; top: 50%; left: 50%; width: 24px; height: 24px; background: #333; border-radius: 50%; transform: translate(-50%, -50%); z-index: 5; }
+        #digital-clock { font-size: 6.5rem; font-weight: bold; font-family: 'Monaco', monospace; line-height: 0.9; }
+
+        .panel-content { height: 100%; padding: 30px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        
+        #display-session-area { font-size: 3rem; font-weight: bold; margin-bottom: 10px; color: var(--accent-color); }
+        
+        .info-box { background: #fff; padding: 25px; border-radius: 20px; box-shadow: 0 6px 12px rgba(0,0,0,0.1); width: 95%; text-align: center; }
+        .time-flow { font-size: 5rem; font-weight: bold; line-height: 1.1; }
+        .wave-symbol { font-size: 3.5rem; display: block; transform: rotate(90deg); color: #888; }
+        .elapsed-display { font-size: 8rem; font-weight: 900; line-height: 1; }
+
+        #settings-full-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.98); z-index: 7000; display: none; }
+        .settings-container { display: flex; height: 100%; }
+        .settings-left { flex: 1; border-right: 2px dashed #ccc; padding: 40px; display: flex; flex-direction: column; justify-content: center; }
+        .settings-right { flex: 1; padding: 40px; display: flex; flex-direction: column; justify-content: center; background: #f0f0f0; }
+
+        h2 { border-left: 10px solid var(--accent-color); padding-left: 15px; margin-bottom: 30px; font-size: 2rem; }
+        .input-group { margin-bottom: 25px; }
+        .input-group label { display: block; font-weight: bold; margin-bottom: 10px; font-size: 1.2rem; }
+        input[type="time"], input[type="text"], input[type="file"], input[type="number"] { width: 100%; font-size: 1.5rem; padding: 12px; border-radius: 8px; border: 1px solid #ccc; box-sizing: border-box; }
+        
+        .checkbox-group { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+        .checkbox-group input[type="checkbox"] { width: 25px; height: 25px; }
+
+        .btn-large { width: 100%; padding: 20px; font-size: 1.5rem; font-weight: bold; border-radius: 12px; border: none; cursor: pointer; color: white; margin-top: 10px; }
+        .bg-blue { background: var(--accent-color); }
+        .bg-green { background: var(--share-color); }
+        .bg-red { background: var(--alert-color); }
+        .bg-dark { background: #333; }
+
+        #shared-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 5000; display: none; justify-content: center; align-items: center; }
+        #shared-overlay img, #shared-overlay video { max-width: 100%; max-height: 100%; width: 100%; height: 100%; object-fit: contain; border: none; }
+
+        .toggle-area { position: fixed; bottom: 20px; right: 20px; z-index: 8000; }
+        #toggle-btn { padding: 15px 25px; cursor: pointer; font-size: 1.5rem; border-radius: 40px; background: #333; color: #fff; border: none; box-shadow: 0 4px 8px rgba(0,0,0,0.3); }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div id="shared-overlay"></div>
+
+<div id="settings-full-screen">
+    <div class="settings-container">
+        <div class="settings-left">
+            <h2>時計の設定</h2>
+            <div class="input-group">
+                <label>第何回？</label>
+                <input type="number" id="input-session" placeholder="1">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="input-show-session">
+                    <label for="input-show-session">「第○回」を表示する</label>
+                </div>
+            </div>
+            <div class="input-group">
+                <label>タイマーと経過時間の表示</label>
+                <div style="display: flex; gap: 10px;">
+                    <input type="time" id="input-start">
+                    <input type="time" id="input-end">
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="input-show-elapsed">
+                    <label for="input-show-elapsed">「経過した時間」を表示する</label>
+                </div>
+            </div>
+            <button class="btn-large bg-blue" onclick="saveSettings()">設定を更新して戻る</button>
+            <button class="btn-large bg-dark" id="btn-toggle-full" onclick="toggleFullClock()">時計を前面に表示する</button>
+        </div>
+
+        <div class="settings-right">
+            <h2>共有の設定</h2>
+            <div class="input-group">
+                <label>【ファイル】メディアを選んで共有（画像・動画・音声）</label>
+                <input type="file" id="input-file" accept="image/*,video/*,audio/*" onchange="handleFileSelect(this)">
+            </div>
+            <button class="btn-large" id="main-share-toggle-btn" onclick="toggleMediaShare()">メディアを共有開始</button>
+        </div>
+    </div>
+</div>
+
+<div class="container" id="main-container">
+    <div class="left-panel">
+        <div id="analog-clock">
+            <div id="end-marker"></div>
+            <div id="numbers-container"></div>
+            <div class="hand hour-hand" id="hour-hand"></div>
+            <div class="hand min-hand" id="min-hand"></div>
+            <div class="hand sec-hand" id="sec-hand"></div>
+            <div class="center-pin"></div>
+        </div>
+        <div id="digital-clock">00:00:00</div>
+    </div>
+
+    <div class="right-panel">
+        <div class="panel-content">
+            <div id="display-session-area" class="hidden">第 <span id="display-session-num">1</span> 回</div>
+            
+            <div class="info-box" id="display-time-info-area">
+                <div class="time-flow" id="display-start">--:--</div>
+                <span class="wave-symbol">～</span>
+                <div class="time-flow" id="display-end">--:--</div>
+            </div>
+            
+            <div id="display-elapsed-area" style="margin-top: 30px; text-align: center;" class="hidden">
+                <div style="font-size: 2rem; font-weight: bold; color: #444;">経過時間</div>
+                <div class="elapsed-display" id="display-elapsed">0分</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="toggle-area">
+        <button id="toggle-btn" onclick="toggleSettings()">⚙ </button>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyBF1Bx_P727FQOosw7nbU4IIZdluSawXcg",
+        authDomain: "aiueo-88110.firebaseapp.com",
+        projectId: "aiueo-88110",
+        storageBucket: "aiueo-88110.firebasestorage.app",
+        messagingSenderId: "654372886977",
+        appId: "1:654372886977:web:d7c7cf53de0bd032763740"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const timerDoc = doc(db, "settings", "timer");
+
+    let startTimeStr = null, endTimeStr = null;
+    let selectedFileBase64 = null;
+    let selectedFileType = null;
+    let currentData = {};
+
+    window.setupClock = function() {
+        const container = document.getElementById('numbers-container');
+        for (let i = 1; i <= 12; i++) {
+            const num = document.createElement('div');
+            num.className = 'number';
+            const angle = i * 30;
+            num.style.transform = `rotate(${angle}deg)`;
+            num.innerHTML = `<span style="display:inline-block; transform:rotate(-${angle}deg)">${i}</span>`;
+            container.appendChild(num);
+        }
+    }
+
+    window.updateClock = function() {
+        const now = new Date();
+        const s = now.getSeconds(), m = now.getMinutes(), h = now.getHours();
+        document.getElementById('sec-hand').style.transform = `rotate(${s * 6}deg)`;
+        document.getElementById('min-hand').style.transform = `rotate(${(m + s/60) * 6}deg)`;
+        document.getElementById('hour-hand').style.transform = `rotate(${(h%12 + m/60) * 30}deg)`;
+        document.getElementById('digital-clock').innerText = now.toLocaleTimeString('ja-JP', { hour12: false });
+
+        if (startTimeStr) {
+            const [sH, sM] = startTimeStr.split(':');
+            const startDate = new Date(); startDate.setHours(parseInt(sH), parseInt(sM), 0, 0);
+            const displayMins = Math.max(0, Math.floor((now - startDate) / 1000 / 60));
+            document.getElementById('display-elapsed').innerText = `${displayMins}分`;
+            if (endTimeStr) {
+                const [eH, eM] = endTimeStr.split(':');
+                const endDate = new Date(); endDate.setHours(parseInt(eH), parseInt(eM), 0, 0);
+                document.getElementById('display-elapsed').classList.toggle('over-time', now > endDate);
+            }
+        }
+    }
+
+    window.toggleSettings = function() {
+        const screen = document.getElementById('settings-full-screen');
+        const btn = document.getElementById('toggle-btn');
+        if (screen.style.display === 'block') {
+            screen.style.display = 'none';
+            btn.innerText = "⚙ ";
+        } else {
+            screen.style.display = 'block';
+            btn.innerText = "× 設定を閉じる";
+        }
+    }
+
+    window.saveSettings = async function() {
+        await setDoc(timerDoc, { 
+            startTime: document.getElementById('input-start').value, 
+            endTime: document.getElementById('input-end').value,
+            sessionCount: document.getElementById('input-session').value,
+            showSession: document.getElementById('input-show-session').checked,
+            showElapsed: document.getElementById('input-show-elapsed').checked,
+            showTimeInfo: true
+        }, { merge: true });
+        toggleSettings();
+    }
+
+    window.handleFileSelect = function(input) {
+        const file = input.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                selectedFileBase64 = e.target.result;
+                selectedFileType = file.type.split('/')[0];
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    window.toggleMediaShare = async function() {
+        const isSharing = currentData.mediaType && currentData.mediaType !== 'none';
+        if (isSharing) {
+            await setDoc(timerDoc, { mediaType: 'none', mediaUrl: '' }, { merge: true });
+            document.getElementById('input-file').value = '';
+            selectedFileBase64 = null;
+        } else {
+            if (selectedFileBase64) {
+                await setDoc(timerDoc, { mediaType: selectedFileType, mediaUrl: selectedFileBase64 }, { merge: true });
+                toggleSettings();
+            } else {
+                alert("共有するファイルを選択してください。");
+            }
+        }
+    }
+
+    window.toggleFullClock = async function() {
+        const isCurrentlyFull = !currentData.showSession && !currentData.showElapsed && currentData.showTimeInfo === false;
+        if (isCurrentlyFull) {
+            await setDoc(timerDoc, { 
+                showSession: document.getElementById('input-show-session').checked,
+                showElapsed: document.getElementById('input-show-elapsed').checked,
+                showTimeInfo: true
+            }, { merge: true });
+        } else {
+            await setDoc(timerDoc, { 
+                mediaType: 'none',
+                showSession: false,
+                showElapsed: false,
+                showTimeInfo: false
+            }, { merge: true });
+        }
+        toggleSettings();
+    }
+
+    onSnapshot(timerDoc, (snapshot) => {
+        if (snapshot.exists()) {
+            currentData = snapshot.data();
+            const data = currentData;
+            startTimeStr = data.startTime; endTimeStr = data.endTime;
+            
+            document.getElementById('display-start').innerText = startTimeStr || "--:--";
+            document.getElementById('display-end').innerText = endTimeStr || "--:--";
+            document.getElementById('display-session-area').classList.toggle('hidden', !data.showSession);
+            if (data.showSession) document.getElementById('display-session-num').innerText = data.sessionCount || "1";
+            document.getElementById('display-elapsed-area').classList.toggle('hidden', !data.showElapsed);
+            document.getElementById('display-time-info-area').classList.toggle('hidden', data.showTimeInfo === false);
+
+            const isFullClock = !data.showSession && !data.showElapsed && data.showTimeInfo === false;
+            document.getElementById('main-container').classList.toggle('full-clock', isFullClock);
+            
+            const toggleBtnLabel = document.getElementById('btn-toggle-full');
+            toggleBtnLabel.innerText = isFullClock ? "通常表示に戻す" : "時計のみ表示";
+            toggleBtnLabel.classList.toggle('bg-red', isFullClock);
+            toggleBtnLabel.classList.toggle('bg-dark', !isFullClock);
+
+            const shareBtn = document.getElementById('main-share-toggle-btn');
+            const isSharing = data.mediaType && data.mediaType !== 'none';
+            if (isSharing) {
+                shareBtn.innerText = "共有を停止する";
+                shareBtn.className = "btn-large bg-red";
+            } else {
+                shareBtn.innerText = "選択したメディアを共有開始";
+                shareBtn.className = "btn-large bg-green";
+            }
+
+            if (endTimeStr) {
+                const marker = document.getElementById('end-marker');
+                marker.style.display = 'block';
+                marker.style.transform = `rotate(${parseInt(endTimeStr.split(':')[1]) * 6}deg)`;
+            }
+
+            const overlay = document.getElementById('shared-overlay');
+            if (isSharing && data.mediaUrl) {
+                if (data.mediaType === 'image') {
+                    overlay.innerHTML = `<img src="${data.mediaUrl}">`;
+                } else if (data.mediaType === 'video') {
+                    overlay.innerHTML = `<video src="${data.mediaUrl}" controls autoplay></video>`;
+                } else if (data.mediaType === 'audio') {
+                    overlay.innerHTML = `<div style="background:#fff; padding:20px; border-radius:10px;"><audio src="${data.mediaUrl}" controls autoplay></audio></div>`;
+                }
+                overlay.style.display = 'flex';
+            } else {
+                overlay.style.display = 'none';
+                overlay.innerHTML = '';
+            }
+        }
+    });
+
+    setupClock();
+    setInterval(updateClock, 1000);
+    updateClock();
+</script>
+
+</body>
+</html>
